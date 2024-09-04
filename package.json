@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "@wise-old-man/utils": "^3.3.2",
+    "axios": "^1.7.2",
+    "canvas": "^2.11.2",
+    "cheerio": "^1.0.0-rc.12",
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "jimp": "^0.22.12",
+    "puppeteer": "^22.11.0",
+    "sharp": "^0.33.4",
+    "svgpath": "^2.6.0"
+  }
+}
