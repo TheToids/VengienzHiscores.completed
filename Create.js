@@ -1,6 +1,6 @@
 //create embed like jsons
 require('dotenv').config();
-const { getWebhookIdAndTokenFromLink, getRole, retryPromise, findParentObject, formatForCanvas, formatNumberForMetrics, sortData, sortObjectByScore } = require('./Utility.js');
+const { getWebhookIdAndTokenFromLink, getRole, getRankByName, retryPromise, findParentObject, formatForCanvas, formatNumberForMetrics, sortData, sortDataWithPetOrdering, sortDataWithRank, sortObjectByScore } = require('./Utility.js');
 const globalJson = require('./Global.json');
 const sharp = require('sharp');
 const fs = require('fs');
@@ -10,10 +10,11 @@ const url = require('url');
 const { WOMClient, Metric, METRICS, formatNumber } = require('@wise-old-man/utils');
 const client = new WOMClient({
     apiKey: `${process.env.API_KEY}`,
-    userAgent: 'Toids'
+    userAgent: 'Toid'
 });
 const group_id = 1219;
 const { EmbedBuilder, WebhookClient, AttachmentBuilder } = require('discord.js');
+const { json } = require('stream/consumers');
 require('dotenv').config();
 
 const petSVG = async (amount) => {
@@ -47,6 +48,13 @@ const rolePNG = async (file) => {
     return sharp(path.join('./Assets/Roles', file))
         .toFormat('png')
         .resize(50, 50)
+        .toBuffer();
+}
+
+const titleHelmPNG = async (file) => {
+    return sharp(path.join('./Assets/Helms', file))
+        .toFormat('png')
+        .resize(40, 40)
         .toBuffer();
 }
 
@@ -118,7 +126,7 @@ const compositeCanvas = async (element) => {
                 const petCanvas = sharp('./Assets/Canvas/canvasPets.png');
                 const metric = await metricSVG(player)
                 const roleImg = await rolePNG(sortedPets[player].role);
-                const helmImg = sortedPets[player].type ? await helmPNG(sortedPets[player].type) : false;
+                const helmImg = sortedPets[player].type ? await titleHelmPNG(sortedPets[player].type) : false;
                 const petAmt = await petSVG(sortedPets[player].amt);
 
                 playerData.push(
@@ -148,17 +156,17 @@ const compositeCanvas = async (element) => {
                 }
                 for (const pet in globalJson.petOwners[player].icons) {
                     const petFile = globalJson.petOwners[player].icons[pet] === 0 ? await petPNG(`fade_${pet}`) : await petPNG(pet);
-                    const petCounted = await petCount(globalJson.petOwners[player].icons[pet]);
+                    //const petCounted = await petCount(globalJson.petOwners[player].icons[pet]);
                     playerData.push(
                         {
                             input: petFile,
                             left: 95 + (rowCounter * 50),
                             top: 135 + (colCounter * 50)
-                        },
-                        {
-                            input: petCounted,
-                            left: 112 + (rowCounter * 50),
-                            top: 135 + (colCounter * 50)
+                            // },
+                            // {
+                            //     input: petCounted,
+                            //     left: 112 + (rowCounter * 50),
+                            //     top: 135 + (colCounter * 50)
                         })
                     rowCounter++;
                     if (rowCounter > 7) {
@@ -174,7 +182,7 @@ const compositeCanvas = async (element) => {
             const communityMember = await headerSVG('Username'), score = await headerSVG('Score'), rank = await headerSVG('Rank');
             const metric = await metricSVG('Collection Log');
             const metricImg = await rolePNG(`coordinator.png`);
-            const sortedClog = await sortData(globalJson.collection_log)
+            const sortedClog = await sortDataWithRank(globalJson.collection_log)
             for (const player in sortedClog) {
                 const helmImg = sortedClog[player].type === 'IRONMAN' ? await helmPNG('Ironman.png') : false;
                 const playerScore = await playerSVG(formatNumberForMetrics(sortedClog[player].amt));
@@ -252,7 +260,7 @@ const compositeCanvas = async (element) => {
             const metric = await metricSVG(globalJson.metricFiles[element]);
             const metricImg = await metricPNG(`${element}.png`);
             const sortedPlayersInMetric = sortObjectByScore(globalJson.metrics[element]);
-            
+
             for (let i = 0; i < sortedPlayersInMetric.length; i++) {
                 const player = sortedPlayersInMetric[i][0];
                 const playerInfo = sortedPlayersInMetric[i][1]; // Renamed to avoid conflict
@@ -336,36 +344,76 @@ const compositeCanvas = async (element) => {
 
 const startIteratingCanvas = async () => {
     for (const metric in globalJson.metrics) {
+        // if (metric !== 'overall') {
+        //     console.log(`Skipping metric: ${metric}`);
+        //     continue; 
+        // }
         await compositeCanvas(metric);
     }
-    await compositeCanvas('collection_log');
-    await compositeCanvas('pets');
+    //await compositeCanvas('pets');
 }
 
 
+// const testIronHiscores = async (name) => {
+//     const hiscoresLite = `https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=${name}`
+//     const ironsRealHiscoresData = await retryPromise(() => axios.get(hiscoresLite));
+//     METRICS.forEach(async element => {
+//         const result = await getRankByName(ironsRealHiscoresData.data, element)
+//         console.log(result, element)
+//     });
+
+// }
+
+// testIronHiscores("diebels")
+
 const buildMetricObj = async (metric) => { //metrics
     try {
-        const hiscores = await retryPromise(() => client.groups.getGroupHiscores(group_id, metric, { limit: 10 }));
-
-        hiscores.forEach(element => {
-
+        const hiscores = await retryPromise(() => client.groups.getGroupHiscores(group_id, metric, { limit: 15 }), 3, 60100, "wiseoldman");
+        for (const element of hiscores) {
+            const playerCap = globalJson.metrics[metric];
+            if (Object.keys(playerCap).length >= 10){
+                continue; //if the metric has more than 10 players, skip it
+            }
+            // 2 issues, ironsRealHiscoresData is delayed in the promise stack, globalJson.metrics[metric] length is not being checked properly
+            // console.log(Object.keys(playerCap).length, metric, element.player.displayName);
             const name = element.player.displayName;
-            let score = 'skill';
-            if (element.data.type === 'skill') { score = element.data.experience; }
-            else if (element.data.type === 'boss') { score = element.data.kills; }
-            else if (element.data.type === 'activity') { score = element.data.score; }
-            else if (element.data.type === 'computed') { score = element.data.value; }
-            else { console.log('invalid metrtic type, exp/score/kills'); }
+            const hiscoresLite = `https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=${name}`
+            const updatedAt = element.player.updatedAt;
+            const typeData = element.player.type;
+            let scoreData = 'skill';
+            let rankData;
+            let ironsRealHiscoresData;
+
+            if (new Date(updatedAt).getTime() < Date.now() - (Date.UTC(1970, 0, 3))) {
+                console.log(`Skipping, ${name}, needs updated or removed for metric ${metric}`);
+                continue;
+            }
+
+            //somehow skipping occasionally, found in overall metric data
+            if (typeData !== 'regular' && element.data.type !== 'computed') {
+                ironsRealHiscoresData = await retryPromise(() => axios.get(hiscoresLite, { headers: { 'User-Agent': 'Hobby project for osrs community vengienz. Fetches difference of ironman ranks for our in-game clan.' } }), 5, 180000, "jagex");
+                rankData = await getRankByName(ironsRealHiscoresData.data, metric);
+                rankData === null ? console.log(`Rank data for ${name} in metric ${metric} is null.`) : console.log(`Rank data for ${name} in metric ${metric} is: ${rankData}`);
+            }
+            else {
+                rankData = element.data.rank;
+            }
+
+            if (element.data.type === 'skill') { scoreData = element.data.experience; }
+            else if (element.data.type === 'boss') { scoreData = element.data.kills; }
+            else if (element.data.type === 'activity') { scoreData = element.data.score; }
+            else if (element.data.type === 'computed') { scoreData = element.data.value; }
+            else { console.log('invalid metric type, exp/score/kills'); }
 
             const playerData = {
-                type: element.player.type,
-                rank: element.data.rank,
-                score: score,
+                type: typeData,
+                rank: rankData,
+                score: scoreData,
                 role: globalJson.roleFiles[getRole(name)]
             };
             delete globalJson.metrics[metric].cat;
             globalJson.metrics[metric][name] = playerData;
-        });
+        }
     } catch (error) {
         console.error(error)
     }
@@ -375,42 +423,53 @@ const startIteratingMetrics = async () => {
     const metricDir = './Assets/Metrics/'
     const files = await fs.promises.readdir(metricDir);
     globalJson["metrics"] = {};
-
     for (const file of files) {
         const metricName = path.parse(file).name;
+        // if (metricName !== 'overall') {
+        //     console.log(`Skipping metric: ${metricName}`);
+        //     continue; 
+        // }
         globalJson["metrics"][metricName] = {};
         await buildMetricObj(metricName);
     }
     await fs.promises.writeFile('Global.json', JSON.stringify(globalJson, null, 2));
 }
 
-
 const buildPetOwnerObj = async (petOwner) => { //petOwners
     try {
-        if (petOwner === "SuperVegeto") return;
+        const petOwnersToExempt = ["K1ERZ", "nicnad", "Yurus", "7J"];
+        if (petOwnersToExempt.includes(petOwner)) return;
+
         let petObtained = 0, petCount = 0;
-        const url = `https://api.collectionlog.net/collectionlog/user/${petOwner}`
-        const response = await retryPromise(() => axios.get(url));
-        const allPets = response.data.collectionLog.tabs.Other['All Pets'].items;
-        const accountType = response.data.collectionLog.accountType.toLowerCase();
+        const url = `https://templeosrs.com/api/pets/pet_count.php?player=${petOwner}`
+        const urlForAccType = `https://api.wiseoldman.net/v2/players/search?username=${petOwner}`
+        const response = await retryPromise(() => axios.get(url), 5, 60100, "templeosrs");
+        const responseForAccType = await retryPromise(() => axios.get(urlForAccType), 5, 60100, "wiseoldman");
+        const allPets = response.data.data["1"].pets;
+        const accountType = responseForAccType.data[0].type;
         globalJson.petOwners[petOwner].icons = {};
+
         for (const pet in allPets) {
-            if (allPets[pet].obtained) { petObtained++; }
-            let petFile = globalJson.petFiles[allPets[pet].id];
-            globalJson.petOwners[petOwner].icons[petFile] = allPets[pet].quantity;
+            if (allPets[pet] > 0) { petObtained++; }
+            let petFile = globalJson.petFiles[petCount][1];
+
+            globalJson.petOwners[petOwner].icons[petFile] = allPets[pet];
             petCount++;
 
         }
-
         globalJson.petOwners[petOwner].onSite = true;
         globalJson.petOwners[petOwner].amt = petObtained;
-        globalJson.petOwners[petOwner].type = accountType === 'normal' ? "" : globalJson.helmFiles[accountType];
+        globalJson.petOwners[petOwner].type = accountType === 'normal' ? " " : globalJson.helmFiles[accountType];
         globalJson.petOwners[petOwner].role = globalJson.roleFiles[await getRole(petOwner)];
         globalJson.petOwners[petOwner].obtainable = petCount;
+
+        globalJson.petOwners[petOwner].icons = await sortDataWithPetOrdering(globalJson.petOwners[petOwner].icons);
+
     } catch (error) {
         console.error(error);
     }
 }
+
 const startIteratingPets = async () => {
     for (const petOwner in globalJson.petOwners) {
         await buildPetOwnerObj(petOwner);
@@ -418,51 +477,71 @@ const startIteratingPets = async () => {
     await fs.promises.writeFile('Global.json', JSON.stringify(globalJson, null, 2));
 }
 
-
-const buildClogObj = async (clogOwner) => { //clog
-    try {
-        if (clogOwner === "osleeb") return;
-        const url = `https://api.collectionlog.net/collectionlog/user/${clogOwner}`;
-        const urlRank = `https://api.collectionlog.net/hiscores/rank/${clogOwner}`;
-        const response = await retryPromise(() => axios.get(url));
-        const responseRank = await retryPromise(() => axios.get(urlRank));
-
-        globalJson.collection_log[clogOwner] = {};
-        globalJson.collection_log[clogOwner].onSite = true;
-        globalJson.collection_log[clogOwner].amt = response.data.collectionLog.uniqueObtained;
-        globalJson.collection_log[clogOwner].type = response.data.collectionLog.accountType;
-        globalJson.collection_log[clogOwner].role = await getRole(clogOwner) + '.png';
-        globalJson.collection_log[clogOwner].rank = responseRank.data.rank;
-    } catch (error) {
-        console.error(error);
-    }
+const updateForNewContent = async () => {
+    //await startIteratingMetrics();
+    //await startIteratingPets();
+    //await startIteratingCanvas(); // reminder: requires active scope iteration of metrics and pets
 }
+//updateForNewContent()
+//startIteratingMetrics();
+//startIteratingCanvas();
 
-const startIteratingClogs = async () => {
-    for (const clogOwner in globalJson.collection_log) {
-        await buildClogObj(clogOwner);
-    }
-    await fs.promises.writeFile('Global.json', JSON.stringify(globalJson, null, 2));
-}
+//const skippable = [`Deadman Points`, 'Bounty Hunter (Legacy) - Hunter', 'Bounty Hunter (Legacy) - Rogue'];
+//might eventually be functional thru osrs api
+// const testingMetrics = async () => {
+//     let comparedMetrics = {};
+//     let indexReboot = 0;
+//     const skippable = [`Deadman Points`, 'Bounty Hunter (Legacy) - Hunter', 'Bounty Hunter (Legacy) - Rogue'];
+//     const hiscoresLite = `https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=toids`
+//     const ironsRealHiscoresData = await retryPromise(() => axios.get(hiscoresLite));
+
+//     function testingFunction(i){
+//         if (skippable.includes(ironsRealHiscoresData.data.activities[i].name)) {
+//             return testingFunction(i + 1);
+//         }
+//         return i;
+//     }
+
+//     METRICS.forEach(async (element, index) => {
+//         //console.log(indexReboot)
+//         if (ironsRealHiscoresData.data.skills[index]) {
+//             comparedMetrics[`${element}`] = ironsRealHiscoresData.data.skills[index].name;
+//         }
+//         else if (ironsRealHiscoresData.data.activities[indexReboot]) {
+
+//             indexReboot = testingFunction(indexReboot);
+//             comparedMetrics[`${element}`] = ironsRealHiscoresData.data.activities[indexReboot].name;
+//             indexReboot += 1;
+//         }
+//     });
+//     console.log(JSON.stringify(comparedMetrics));
+
+
+
+
+//     //rankData = await getRankByName(ironsRealHiscoresData.data, metric)
+// }
+
+// testingMetrics()
+
+
 
 const shipment = async () => {
     await startIteratingMetrics()
     await startIteratingPets()
-    await startIteratingClogs()
+    console.log("Metrics and Pets iteration complete.");
     await startIteratingCanvas();
+
 }
+//startIteratingMetrics();
+//startIteratingPets();
+//startIteratingCanvas();
+//shipment();
 
 module.exports = {
-shipment
+    shipment
 };
 
-const updateForNewPets = async () => {
-    await startIteratingMetrics()
-    await startIteratingPets()
-    await startIteratingClogs()
-    await startIteratingCanvas();
-}
-updateForNewPets()
 
 
 

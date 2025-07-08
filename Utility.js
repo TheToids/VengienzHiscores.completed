@@ -12,8 +12,7 @@ const client = new WOMClient({
 });
 const { EmbedBuilder, WebhookClient, AttachmentBuilder } = require('discord.js');
 let membersGlobal = []; //unsure if this is being called mutiple times due to scope.
-
-
+let fetchCount = 0;
 
 const getWebhookIdAndTokenFromLink = (link) => {
     const regex = /https:\/\/discord\.com\/api\/webhooks\/(\d+)\/([\w-]+)/;
@@ -24,7 +23,6 @@ const getWebhookIdAndTokenFromLink = (link) => {
 function parseCSV(csvString) {
     const lines = csvString.split('\n');
     const result = [];
-
     lines.forEach((line, index) => {
         if (index > 0) {
             let [player, role] = line.split(',');
@@ -46,7 +44,6 @@ const initializeCSV = async () => {
     return membersGlobal;
 };
 
-
 const getRole = async (playerName) => {
     try {
         const members = await initializeCSV();
@@ -59,19 +56,60 @@ const getRole = async (playerName) => {
     }
 }
 
-async function retryPromise(fn, maxRetries = 10, delay = 61000) {
-    let attempts = 0;
-
-    while (attempts < maxRetries) {
+async function retryPromise(fn, maxRetries = 5, delay = 60000, apiHeader = "wiseoldman") {
+    //apiHeader is used to determine if the api is wiseoldman, templeosrs, jagex, or discord
+    //https://docs.wiseoldman.net/api/groups/group-endpoints#get-group-hiscores
+    //https://templeosrs.com/api_doc.php#Pet_Endpoints
+    //https://runescape.wiki/w/Application_programming_interface#Old_School_Hiscores
+    //https://discord.com/developers/docs/topics/rate-limits#rate-limits
+    let attempt = 0, lastError;
+    while (attempt < maxRetries) {
         try {
+            if (apiHeader === "wiseoldman" && (fetchCount / 100) >= 1 && fetchCount % 100 === 0) {
+                throw new Error('Fetch count exceeded 100 requests, waiting for rate limit reset.');
+            }
             return await fn();
         } catch (error) {
-            attempts++;
-            console.log(`Attempt ${attempts}: Retrying in ${delay}ms...`);
-            if (attempts === maxRetries) throw error;
+             // Only retry on network/timeout errors (504, ECONNABORTED, etc)
+            const status = error.response?.status;
+            if (error.message.toLowerCase().includes('Fetch count exceeded')) {
+                if (attempt >= maxRetries) break;
+                console.log(`Attempt ${attempt}: ${error} Retrying in ${delay}ms...`);
+            } else if (status && status >= 500) {
+                // Server errors (5xx) are retried
+                console.log(`Attempt ${attempt + 1}: Server error ${status}. Retrying in ${delay}ms...`);
+                delay = 300000; // Cap at 5 min
+            } else if (status && status >= 400 && status < 500) {
+                // Client errors (4xx) are not retried, except for rate limits
+                if (status === 429 || status === 403 || status === 401 || status === 404) {
+                    console.log(`Attempt ${attempt + 1}: Client error ${status}. Retrying in ${delay}ms...`);
+                    delay = Math.min(delay * 1.1, 300000); // Increase delay, cap at 5 min
+                } else {
+                    console.log(`Attempt ${attempt + 1}: Client error ${status}. Not retrying.`);
+                    throw error;
+                }
+            } else {
+                // Network errors or unknown errors are retried
+                console.log(`Attempt ${attempt + 1}: Network error or unknown error. Retrying in ${delay}ms...`);
+                delay = Math.min(delay * 1.1, 300000); // Increase delay, cap at 5 min
+            }
+            const isGatewayTimeout = status === 504;
+            const isServiceUnavailable = status === 503;
+            const isBadGateway = status === 502; // Bad gateway
+            const isRateLimit = status === 429;
+            const isTimeout = error.code === 'ECONNABORTED' || (error.message && error.message.toLowerCase().includes('timeout')); 
+            const isNotFound = status === 404; // Not found
+            const isForbidden = status === 403; // Blocked or blacklisted
+            const isUnauthorized = status === 401; // Unauthorized
+            const isNetworkError = !status && error.code === 'ENOTFOUND'; // DNS/network error
+            lastError = error;
+            attempt++;
             await new Promise(resolve => setTimeout(resolve, delay));
+        } finally {
+            fetchCount += 1;
         }
     }
+    throw lastError;
 }
 
 function findParentObject(obj, targetKey) {
@@ -84,12 +122,12 @@ function findParentObject(obj, targetKey) {
     }
     return null; // If the targetKey wasn't found in any object
 }
-
 function formatForCanvas(word) {
     let words = word.split('_')
     let formattedWord = words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     return formattedWord;
 }
+
 function formatNumberForMetrics(number) {
     if (number >= 1000000000) {
         return (number / 1000000000).toFixed(3) + 'b';
@@ -99,15 +137,52 @@ function formatNumberForMetrics(number) {
     else {
         return Math.floor(number).toLocaleString()
     }
-
 }
 
+function sortObjectByScore(obj) {
+    // Convert the object to an array of entries
+    let entries = Object.entries(obj);
+    // Sort the entries by score
+    entries.sort(([, a], [, b]) => b.score - a.score);
+    return entries;
+}
+
+const sortDataWithPetOrdering = async (data) => {
+    const order = globalJson.petFilesOrdering;
+    const sortedIcons = {};
+    order.forEach(key => {
+        if (data[key] !== undefined) {
+            sortedIcons[key] = data[key];
+        }
+    });
+    return sortedIcons;
+}
+
+const sortDataWithRank = async (data) => {
+    let dataToSort = Object.keys(data).map(key => {
+        return { name: key, ...data[key] };
+    });
+    // Sort by amt first, then by rank
+    dataToSort.sort((a, b) => {
+        if (a.amt !== b.amt) {
+            return b.amt - a.amt;
+        } else {
+            return a.rank - b.rank;
+        }
+    });
+    let sortedData = {};
+    dataToSort.forEach(item => {
+        let { name, ...rest } = item;
+        sortedData[name] = rest;
+    });
+    return sortedData;
+};
 
 const sortData = async (data) => {
     let dataToSort = Object.keys(data).map(key => {
         //console.log('Key:', key, 'Value:', data[key]); // Add this to debug
         return { name: key, ...data[key] };
-    }); 
+    });
     dataToSort.sort((a, b) => b.amt - a.amt);
     let sortedData = {};
     dataToSort.forEach(item => {
@@ -117,25 +192,13 @@ const sortData = async (data) => {
     return sortedData;
 }
 
-function sortObjectByScore(obj) {
-    // Convert the object to an array of entries
-    let entries = Object.entries(obj);
-
-    // Sort the entries by score
-    entries.sort(([,a], [,b]) => b.score - a.score);
-
-    return entries;
-}
 const sortPetOwners = async (petOwners) => {
     // Convert the object to an array of entries
     let entries = Object.entries(petOwners);
-
     // Sort the entries by the 'amt' value
     entries.sort((a, b) => b[1].amt - a[1].amt);
-
     // Convert the entries back to an object
     let sortedPetOwners = Object.fromEntries(entries);
-
     return sortedPetOwners;
 }
 
@@ -152,26 +215,35 @@ const findObj = (obj, innerKey) => {
     return null;
 };
 
-
-/* const updateMessageIds = async (sortedPets) => {
-    let i = 0;
-    for (player in sortedPets) {
-        i++
-        globalJson.messageIDs[player]
+const getRankByName = (playerData, metric) => {
+    const newMetric = globalJson.untapped_metrics[metric];
+    //Search through skills
+    const skill = playerData.skills.find(skill => skill.name === newMetric);
+    if (skill) {
+        return skill.rank;
     }
-    await fs.promises.writeFile('Global.json', JSON.stringify(globalJson, null, 2));
+    // Search through activities if not found in skills
+    const activity = playerData.activities.find(activity => activity.name === newMetric);
+    if (activity) {
+        return activity.rank;
+    }
+    //Return null if not found in either
+    return null;
 }
- */
+
 
 
 module.exports = {
     getWebhookIdAndTokenFromLink,
     getRole,
+    getRankByName,
     retryPromise,
     findParentObject,
     formatForCanvas,
     formatNumberForMetrics,
     sortData,
+    sortDataWithPetOrdering,
+    sortDataWithRank,
     sortPetOwners,
     findKey,
     findObj,

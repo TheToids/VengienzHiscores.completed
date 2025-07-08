@@ -451,6 +451,73 @@ const testFunct = async () => {
 }
 //testFunct();
 
+const testFunct2 = async () => {
+    clientVeng.on('messageCreate', async message => {
+      if (message.content === '!toid') {
+        let roleToAssign = message.guild.roles.cache.find(role => role.name === "Sergeant"); // Replace "New Role Name" with the actual role name
+        let roleToRemove = message.guild.roles.cache.find(role => role.name === "Corporal");
+        if (!roleToRemove) return message.channel.send('No "clan member" role found.');
+  
+        await message.guild.members.fetch();
+  
+        let members = message.guild.members.cache.filter(member => member.roles.cache.has(roleToRemove.id));  // Use has method to check role ID
+  
+        for (let member of members.values()) { // Iterate using values() method
+          try {
+            await member.roles.remove(roleToRemove);
+            await member.roles.add(roleToAssign);
+            console.log(`Added role "${roleToAssign.name}" to ${member.displayName}`);
+          } catch (error) {
+            console.error(`Failed to add role to ${member.displayName}: ${error}`);
+          }
+        }
+      }
+    });
+    clientVeng.login(process.env.VENG_TOKEN);
+  };
+//testFunct2();
+
+const vengListEHB = async () => {
+    const hiscores = await retryPromise(() => client.groups.getGroupHiscores(group_id, 'ehb', { limit: 500 }), 5, 60000, "wiseoldman");
+
+    const dataForExcel = [];
+
+    for (const element of hiscores) {
+        const name = element.player.displayName;
+        const typeData = element.player.type;
+        const scoreData = element.data.value;
+
+        const playerData = {
+            type: typeData,
+            score: scoreData,
+            role: globalJson.roleFiles[getRole(name)] // Assuming getRole is defined
+        };
+
+        dataForExcel.push({
+            name: name,
+            score: scoreData,
+            type: typeData,
+            role: playerData.role
+        });
+    }
+
+    // Use json2csv (much better for CSV creation)
+    const { Parser } = require('json2csv'); // Make sure you've installed it: npm install json2csv
+    const fields = ['name', 'score', 'type', 'role']; // Define the order of columns
+    const parser = new Parser({ fields });
+    const csv = parser.parse(dataForExcel);
+
+    // Save to file using the fs module
+    const fs = require('fs');
+    const filename = 'ehb_hiscores.csv'; // Choose your filename
+    fs.writeFileSync(filename, csv); // Write the CSV data to the file
+
+    console.log(`CSV file "${filename}" created successfully.`); // Confirmation message
+};
+// vengListEHB().catch(error => {
+//     console.error("Error generating CSV:", error);
+// });
+
 
 const renameBackToWebp = async () => {
     const files = await fs.promises.readdir('C:/Users/Cody/Documents/Temp/Metrics')
@@ -462,9 +529,11 @@ const renameBackToWebp = async () => {
 
 
 const newPetsFunction = async () => {
-    await createPetsTextSVGNormal('./Assets/Pets/test/normal/')
-    await makeThemTransparent('./Assets/Pets/test/normal');
+    //await createPetsTextSVGNormal('./Assets/Pets/test/normal/')
+    await makeThemTransparent('./Assets/Pets/test/not_faded/');
     await createPetsTextSVG('./Assets/Pets/test/faded/test/')
 }
-// move file to Assets\Pets\transformed
-await newPetsFunction()
+// move webn img to /Assets/Pets/test/normal/ and then the 2 new files from /Assets/Pets/test/not_faded+faded to Assets/Pets/transformed
+//newPetsFunction().catch(error => {
+//    console.error(error)
+//});

@@ -1,3 +1,5 @@
 .env
 node_modules/
 Assets/
+.vscode/launch.json
+ehb_hiscores.csv

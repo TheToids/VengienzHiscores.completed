@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@discordjs/rest": "^2.4.2",
     "@wise-old-man/utils": "^3.3.2",
     "axios": "^1.7.2",
     "canvas": "^2.11.2",
@@ -7,6 +8,7 @@
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
     "jimp": "^0.22.12",
+    "json2csv": "^6.0.0-alpha.2",
     "puppeteer": "^22.11.0",
     "sharp": "^0.33.4",
     "svgpath": "^2.6.0"
