@@ -1,6 +1,6 @@
 //run functions for final ship
 require('dotenv').config();
-const { getWebhookIdAndTokenFromLink, getRole, retryPromise, findParentObject, formatForCanvas, formatNumberForMetrics, sortData, findKey, findObj, sortPetOwners, updateMessageIds } = require('./Utility.js');
+const { getWebhookIdAndTokenFromLink,  retryPromise, sortPetOwners } = require('./Utility.js');
 const { shipment } = require('./Create.js');
 const globalJson = require('./Global.json');
 const fs = require('fs');

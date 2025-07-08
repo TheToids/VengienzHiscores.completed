@@ -1,6 +1,6 @@
 //create embed like jsons
 require('dotenv').config();
-const { getWebhookIdAndTokenFromLink, getRole, getRankByName, retryPromise, findParentObject, formatForCanvas, formatNumberForMetrics, sortData, sortDataWithPetOrdering, sortDataWithRank, sortObjectByScore } = require('./Utility.js');
+const { getRole, getRankByName, retryPromise, formatNumberForMetrics, sortData, sortDataWithPetOrdering, sortObjectByScore } = require('./Utility.js');
 const globalJson = require('./Global.json');
 const sharp = require('sharp');
 const fs = require('fs');
@@ -176,86 +176,8 @@ const compositeCanvas = async (element) => {
                 }
                 //console.log(`./Assets/Embeds/${player}.png`)
                 await petCanvas.composite(playerData).toFile(`./Assets/Embeds/${player}.png`);
-            }
-        }
-        else if (element === 'collection_log') {
-            const communityMember = await headerSVG('Username'), score = await headerSVG('Score'), rank = await headerSVG('Rank');
-            const metric = await metricSVG('Collection Log');
-            const metricImg = await rolePNG(`coordinator.png`);
-            const sortedClog = await sortDataWithRank(globalJson.collection_log)
-            for (const player in sortedClog) {
-                const helmImg = sortedClog[player].type === 'IRONMAN' ? await helmPNG('Ironman.png') : false;
-                const playerScore = await playerSVG(formatNumberForMetrics(sortedClog[player].amt));
-                const role = await getRole(player) + '.png';
-                const playerRole = await sharp(path.join('./Assets/Roles', role)).resize(18, 18).toBuffer();
-                const playerName = await playerSVG(player);
-                const playerRank = sortedClog[player].rank === '-' ? await playerRankSVG('-') : await playerRankSVG(formatNumberForMetrics(sortedClog[player].rank));
-                const playerRankData = await sharp(playerRank).metadata();
-                playerData.push(
-                    {
-                        input: playerRole,
-                        left: 98,
-                        top: startPos + (playerCount * 30) + 2
-                    },
-                    {
-                        input: playerName,
-                        left: 120,
-                        top: startPos + (playerCount * 30)
-                    },
-                    {
-                        input: playerScore,
-                        left: 295,
-                        top: startPos + (playerCount * 30)
-                    },
-                    {
-                        input: playerRank,
-                        left: 415,
-                        top: startPos + (playerCount * 30)
-                    });
-                if (helmImg) {
-                    playerData.push(
-                        {
-                            input: helmImg,
-                            left: 415 + (playerRankData.width) - 10,
-                            top: startPos + (playerCount * 30) + 5
-                        }
-                    )
-                }
-                playerCount++;
-            }
-            playerData.push(
-                {
-                    input: metric,
-                    left: 150,
-                    top: 20,
-                },
-                {
-                    input: metricImg,
-                    left: 275,
-                    top: 100,
-                }
-            );
-
-            playerData.push(
-                {
-                    input: communityMember,
-                    left: 105,
-                    top: 190,
-                },
-                {
-                    input: score,
-                    left: 295,
-                    top: 190,
-                },
-                {
-                    input: rank,
-                    left: 415,
-                    top: 190,
-                }
-            )
-            await canvas.composite(playerData).toFile(`./Assets/Embeds/${element}.png`);
-        }
-        else {
+            } 
+        } else {
             const communityMember = await headerSVG('Username'), score = await headerSVG('Score'), rank = await headerSVG('Rank');
             const metric = await metricSVG(globalJson.metricFiles[element]);
             const metricImg = await metricPNG(`${element}.png`);

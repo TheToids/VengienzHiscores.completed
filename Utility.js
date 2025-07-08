@@ -51,7 +51,7 @@ const getRole = async (playerName) => {
         const memberRole = member[playerName.toLowerCase()];
         return await memberRole;
     } catch (error) {
-        console.error('An error occurred:', error);
+        console.error('An error occurred fetching member role:', error);
         return "guest";
     }
 }
@@ -112,22 +112,6 @@ async function retryPromise(fn, maxRetries = 5, delay = 60000, apiHeader = "wise
     throw lastError;
 }
 
-function findParentObject(obj, targetKey) {
-    for (let key in obj) {
-        if (obj.hasOwnProperty(key) && typeof obj[key] === 'object') {
-            if (obj[key].hasOwnProperty(targetKey)) {
-                return key; // This is the parent key
-            }
-        }
-    }
-    return null; // If the targetKey wasn't found in any object
-}
-function formatForCanvas(word) {
-    let words = word.split('_')
-    let formattedWord = words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-    return formattedWord;
-}
-
 function formatNumberForMetrics(number) {
     if (number >= 1000000000) {
         return (number / 1000000000).toFixed(3) + 'b';
@@ -139,6 +123,11 @@ function formatNumberForMetrics(number) {
     }
 }
 
+// let sortedData = {};
+// dataToSort.forEach(item => {
+// let { name, ...rest } = item;
+// sortedData[name] = rest; });
+
 function sortObjectByScore(obj) {
     // Convert the object to an array of entries
     let entries = Object.entries(obj);
@@ -147,7 +136,7 @@ function sortObjectByScore(obj) {
     return entries;
 }
 
-const sortDataWithPetOrdering = async (data) => {
+const sortDataWithPetOrdering = async (data) => { //seems unneeded, but keeping for now
     const order = globalJson.petFilesOrdering;
     const sortedIcons = {};
     order.forEach(key => {
@@ -157,26 +146,6 @@ const sortDataWithPetOrdering = async (data) => {
     });
     return sortedIcons;
 }
-
-const sortDataWithRank = async (data) => {
-    let dataToSort = Object.keys(data).map(key => {
-        return { name: key, ...data[key] };
-    });
-    // Sort by amt first, then by rank
-    dataToSort.sort((a, b) => {
-        if (a.amt !== b.amt) {
-            return b.amt - a.amt;
-        } else {
-            return a.rank - b.rank;
-        }
-    });
-    let sortedData = {};
-    dataToSort.forEach(item => {
-        let { name, ...rest } = item;
-        sortedData[name] = rest;
-    });
-    return sortedData;
-};
 
 const sortData = async (data) => {
     let dataToSort = Object.keys(data).map(key => {
@@ -202,19 +171,6 @@ const sortPetOwners = async (petOwners) => {
     return sortedPetOwners;
 }
 
-const findKey = (obj, key) => {
-    return Object.values(obj).find(subObj => Object.keys(subObj).includes(key));
-};
-
-const findObj = (obj, innerKey) => {
-    for (let [outerKey, subObj] of Object.entries(obj)) {
-        if (innerKey in subObj) {
-            return outerKey;
-        }
-    }
-    return null;
-};
-
 const getRankByName = (playerData, metric) => {
     const newMetric = globalJson.untapped_metrics[metric];
     //Search through skills
@@ -232,20 +188,31 @@ const getRankByName = (playerData, metric) => {
 }
 
 
+// const findKey = (obj, key) => {
+//     return Object.values(obj).find(subObj => Object.keys(subObj).includes(key));
+// };
+
+// const findObj = (obj, innerKey) => {
+//     for (let [outerKey, subObj] of Object.entries(obj)) {
+//         if (innerKey in subObj) {
+//             return outerKey;
+//         }
+//     }
+//     return null;
+// };
+
+
+
+
 
 module.exports = {
     getWebhookIdAndTokenFromLink,
     getRole,
     getRankByName,
     retryPromise,
-    findParentObject,
-    formatForCanvas,
     formatNumberForMetrics,
     sortData,
     sortDataWithPetOrdering,
-    sortDataWithRank,
     sortPetOwners,
-    findKey,
-    findObj,
     sortObjectByScore
 };
