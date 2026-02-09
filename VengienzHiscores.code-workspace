@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"name": "VengienzHiscores.completed",
+			"path": "."
+		}
+	],
+	"settings": {
+		"launch": {
+			"configurations": [
+				{
+					"type": "node",
+					"request": "launch",
+					"name": "Launch SendToDiscord",
+					"program": "${file}"
+				}
+			],
+			"compounds": [],
+			"version": "0.2.0"
+		}
+	}
+}

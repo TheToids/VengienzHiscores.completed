@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { getWebhookIdAndTokenFromLink, getRole, retryPromise, findParentObject } = require('../Utility.js');
+const { getchannelIdAndTokenFromLink, getRole, retryPromise, findParentObject } = require('../Utility.js');
 const fs = require('fs');
 const puppeteer = require('puppeteer');
 const Jimp = require('jimp');
@@ -8,7 +8,6 @@ const svgpath = require('svgpath');
 const sharp = require('sharp');
 const axios = require('axios');
 const path = require('path');
-const url = require('url');
 const { WOMClient, Metric, METRICS } = require('@wise-old-man/utils');
 const client = new WOMClient({
     apiKey: `${process.env.API_KEY}`,
@@ -115,7 +114,7 @@ console.log(JSON.stringify(fileObject, null, 2));
 
 */
 
-const webhookDetails = getWebhookIdAndTokenFromLink(process.env.WEBHOOK_URL);
+const webhookDetails = getchannelIdAndTokenFromLink(process.env.WEBHOOK_URL);
 const webhookClient = new WebhookClient({ id: webhookDetails.id, token: webhookDetails.token });
 const testSend = async () => {
     try {
@@ -273,7 +272,7 @@ function capitalizeWords(str) {
     });
 }
 
-const createPetsTextSVG = async (directoryPath) => {
+const createPetsTextSVGNotFaded = async (directoryPath) => {
     try {
         // Helper function to capitalize words
 
@@ -317,8 +316,9 @@ const createPetsTextSVG = async (directoryPath) => {
 
             // Write the final image to the file
 
-            const outputPath = path.join(`./Assets/Pets/test/faded/`, `fade_${fileUp}.png`);
+            const outputPath = path.join(`./Assets/Pets/Not_Faded/`, `${fileUp}.png`);
             //console.log(`Output image with text overlay saved as '${outputPath}'`);
+            await fs.promises.mkdir(`./Assets/Pets/Not_Faded/`, { recursive: true })
             await fs.promises.writeFile(outputPath, finalImage);
             //console.log(`Output image with text overlay saved as '${outputPath}'`);
 
@@ -328,10 +328,7 @@ const createPetsTextSVG = async (directoryPath) => {
     }
 };
 
-
-
-
-const createPetsTextSVGNormal = async (directoryPath) => {
+const createPetsTextSVGFaded = async (directoryPath) => {
     try {
         // Helper function to capitalize words
 
@@ -375,8 +372,9 @@ const createPetsTextSVGNormal = async (directoryPath) => {
 
             // Write the final image to the file
 
-            const outputPath = path.join(`./Assets/Pets/test/not_faded/`, `${fileUp}.png`);
+            const outputPath = path.join(`./Assets/Pets/Faded/`, `fade_${fileUp}.png`);
             //console.log(`Output image with text overlay saved as '${outputPath}'`);
+            await fs.promises.mkdir(`./Assets/Pets/Faded/`, { recursive: true })
             await fs.promises.writeFile(outputPath, finalImage);
             //console.log(`Output image with text overlay saved as '${outputPath}'`);
 
@@ -385,10 +383,6 @@ const createPetsTextSVGNormal = async (directoryPath) => {
         console.error(`Error: ${error}`);
     }
 };
-
-
-
-
 
 const makeThemTransparent = async (directoryPath) => {
     const files = await fs.promises.readdir(directoryPath);
@@ -407,7 +401,7 @@ const makeThemTransparent = async (directoryPath) => {
                     image.setPixelColor(Jimp.rgbaToInt(rgba.r, rgba.g, rgba.b, rgba.a), x, y);
                 });
                 // write the new image to file
-                let newFilePath = path.join('./Assets/Pets/test/faded/test/' + file);
+                let newFilePath = path.join('./Assets/Pets/Transparent/' + file);
                 await image.writeAsync(newFilePath);
             } catch (err) {
                 console.error(err);
@@ -454,7 +448,7 @@ const testFunct = async () => {
 const testFunct2 = async () => {
     clientVeng.on('messageCreate', async message => {
       if (message.content === '!toid') {
-        let roleToAssign = message.guild.roles.cache.find(role => role.name === "Sergeant"); // Replace "New Role Name" with the actual role name
+        let roleToAssign = message.guild.roles.cache.find(role => role.name === "Sergeant"); 
         let roleToRemove = message.guild.roles.cache.find(role => role.name === "Corporal");
         if (!roleToRemove) return message.channel.send('No "clan member" role found.');
   
@@ -484,11 +478,11 @@ const vengListEHB = async () => {
 
     for (const element of hiscores) {
         const name = element.player.displayName;
-        const typeData = element.player.type;
+        const playerTypeData = element.player.type;
         const scoreData = element.data.value;
 
         const playerData = {
-            type: typeData,
+            type: playerTypeData,
             score: scoreData,
             role: globalJson.roleFiles[getRole(name)] // Assuming getRole is defined
         };
@@ -496,7 +490,7 @@ const vengListEHB = async () => {
         dataForExcel.push({
             name: name,
             score: scoreData,
-            type: typeData,
+            type: playerTypeData,
             role: playerData.role
         });
     }
@@ -528,12 +522,41 @@ const renameBackToWebp = async () => {
 //renameBackToWebp()
 
 
-const newPetsFunction = async () => {
-    //await createPetsTextSVGNormal('./Assets/Pets/test/normal/')
-    await makeThemTransparent('./Assets/Pets/test/not_faded/');
-    await createPetsTextSVG('./Assets/Pets/test/faded/test/')
+
+// Asset type paths for easy reference
+const ASSET_PATHS = {
+  metrics: './Assets/Metrics',
+  roles: './Assets/Roles',
+  helms: './Assets/Helms',
+  pets: './Assets/Pets/transformed',
+  canvas: './Assets/Canvas',
+};
+
+/**
+ * Composite images on a base canvas, lossless
+ * @param {string|Buffer} basePath - Path or buffer for base image
+ * @param {Array<{input: string|Buffer, left: number, top: number}>} layers
+ * @param {string} outputPath - Output file path
+ */
+async function compositeImage(basePath, outputPath) {
+  const base = sharp(basePath).ensureAlpha();
+  await base.png({ quality: 100, compressionLevel: 0 }).toFile(outputPath);
 }
-// move webn img to /Assets/Pets/test/normal/ and then the 2 new files from /Assets/Pets/test/not_faded+faded to Assets/Pets/transformed
-//newPetsFunction().catch(error => {
-//    console.error(error)
-//});
+
+// compositeImage(`${ASSET_PATHS.metrics}/doom_of_mokhaiotl.webp`, `${ASSET_PATHS.metrics}/doom_of_mokhaiotl.png`)
+
+
+
+
+
+
+const newPetsFunction = async () => {
+    await makeThemTransparent('./Assets/Pets/');
+    await createPetsTextSVGNotFaded('./Assets/Pets/Normal');
+    await createPetsTextSVGFaded('./Assets/Pets/Transparent/');
+    
+}
+// move pet img to /Assets/Pets/test/normal/ and then the 2 new files from /Assets/Pets/test/not_faded+faded to Assets/Pets/transformed
+// newPetsFunction().catch(error => {
+//     console.error(error)
+// });

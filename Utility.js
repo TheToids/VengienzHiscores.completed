@@ -1,24 +1,68 @@
-//various utility functions
+// Various Utility Functions
+
+// Primary imports
 require('dotenv').config();
-const fs = require('fs');
-const axios = require('axios');
-const path = require('path');
-const url = require('url');
 const globalJson = require('./Global.json');
-const { WOMClient, Metric, METRICS } = require('@wise-old-man/utils');
+
+// Secondary imports
+const axios = require('axios');
+const { AttachmentBuilder, EmbedBuilder, WebhookClient } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+const { Metric, METRICS, WOMClient } = require('@wise-old-man/utils');
+
+// Declared file scope
 const client = new WOMClient({
     apiKey: `${process.env.API_KEY}`,
     userAgent: 'Toids'
 });
-const { EmbedBuilder, WebhookClient, AttachmentBuilder } = require('discord.js');
-let membersGlobal = []; //unsure if this is being called mutiple times due to scope.
-let fetchCount = 0;
 
-const getWebhookIdAndTokenFromLink = (link) => {
+let membersGlobal = []; // Toid: new logic to minimalize file scope
+let fetchCount = 0; // probably keep
+
+const getchannelIdAndTokenFromLink = (link) => {
     const regex = /https:\/\/discord\.com\/api\/webhooks\/(\d+)\/([\w-]+)/;
     const matches = link.match(regex);
     return matches ? { id: matches[1], token: matches[2] } : null;
 };
+
+const parsePetStructures = async (petList) => {
+
+
+
+    // configure to return sorted pet list
+
+
+    // Test key from regex equation on both arrays of pets alternative spellings
+
+
+    // for (const petA in globalJson.petList) {
+    //     for (const petB in petList) {
+    //     }
+    // }
+
+
+    // const regexPet = /^(?!pet|lil|dag|roc)([a-zA-Z]{3})/;
+    // const regexPet = /^(?!pet$|lil$|dag$|roc$)[A-Za-z]{3}/;
+    const regexKey = /^(?:(?:her|bab|pet|lil'|dagannoth|rock|')\s+)*([a-z]{3})/i;
+
+    // const regexKey = /([a-zA-Z]{3})/i;
+
+
+    // solution: find 3 letters, compare to ['pet', 'lil', 'dag', 'roc'] if matched resit variable on regex at index of space + 1
+    let petStructures = [];
+    for (const pet in petList) {
+        const key = pet.match(regexKey);
+        // console.log('Processing pet:', pet);
+        // console.log('Parsed pet key:', key);
+        if (key && petList[pet] > 0) {
+            petStructures.push(key[1].toLowerCase());
+        }
+    }
+    console.log("welcome to answers, take a ticket for more answers", JSON.stringify(petStructures, null, 2));
+    return petStructures;
+}
+
 
 function parseCSV(csvString) {
     const lines = csvString.split('\n');
@@ -44,24 +88,26 @@ const initializeCSV = async () => {
     return membersGlobal;
 };
 
-const getRole = async (playerName) => {
-    try {
+const getRole = async (playerName = true) => {
+    try { // https://api.wiseoldman.net/v2/groups/1219/csv
+        playerName ? true : () => { return 'guest'; };
         const members = await initializeCSV();
         const member = await members.find(obj => obj.hasOwnProperty(playerName.toLowerCase()));
         const memberRole = member[playerName.toLowerCase()];
         return await memberRole;
     } catch (error) {
         console.error('An error occurred fetching member role:', error);
-        return "guest";
+    } finally {
+        playerName = false;
     }
 }
 
 async function retryPromise(fn, maxRetries = 5, delay = 60000, apiHeader = "wiseoldman") {
-    //apiHeader is used to determine if the api is wiseoldman, templeosrs, jagex, or discord
-    //https://docs.wiseoldman.net/api/groups/group-endpoints#get-group-hiscores
-    //https://templeosrs.com/api_doc.php#Pet_Endpoints
-    //https://runescape.wiki/w/Application_programming_interface#Old_School_Hiscores
-    //https://discord.com/developers/docs/topics/rate-limits#rate-limits
+    // apiHeader is used to determine if the api is wiseoldman, templeosrs, jagex, or discord
+    // https://docs.wiseoldman.net/api/groups/group-endpoints#get-group-hiscores
+    // https://templeosrs.com/api_doc.php#Pet_Endpoints
+    // https://runescape.wiki/w/Application_programming_interface#Old_School_Hiscores
+    // https://discord.com/developers/docs/topics/rate-limits#rate-limits
     let attempt = 0, lastError;
     while (attempt < maxRetries) {
         try {
@@ -70,7 +116,7 @@ async function retryPromise(fn, maxRetries = 5, delay = 60000, apiHeader = "wise
             }
             return await fn();
         } catch (error) {
-             // Only retry on network/timeout errors (504, ECONNABORTED, etc)
+            // Only retry on network/timeout errors (504, ECONNABORTED, etc)
             const status = error.response?.status;
             if (error.message.toLowerCase().includes('Fetch count exceeded')) {
                 if (attempt >= maxRetries) break;
@@ -97,7 +143,7 @@ async function retryPromise(fn, maxRetries = 5, delay = 60000, apiHeader = "wise
             const isServiceUnavailable = status === 503;
             const isBadGateway = status === 502; // Bad gateway
             const isRateLimit = status === 429;
-            const isTimeout = error.code === 'ECONNABORTED' || (error.message && error.message.toLowerCase().includes('timeout')); 
+            const isTimeout = error.code === 'ECONNABORTED' || (error.message && error.message.toLowerCase().includes('timeout'));
             const isNotFound = status === 404; // Not found
             const isForbidden = status === 403; // Blocked or blacklisted
             const isUnauthorized = status === 401; // Unauthorized
@@ -109,7 +155,7 @@ async function retryPromise(fn, maxRetries = 5, delay = 60000, apiHeader = "wise
             fetchCount += 1;
         }
     }
-    throw lastError;
+    throw lastError; // check if this out of scope throw is necessary
 }
 
 function formatNumberForMetrics(number) {
@@ -128,24 +174,36 @@ function formatNumberForMetrics(number) {
 // let { name, ...rest } = item;
 // sortedData[name] = rest; });
 
+function sortObjectByScore(obj, score = true) {
+    let entries = Object.entries(obj).sort(([, a], [, b]) => { return score == true ? a.rank - b.rank : b.score.toString().localeCompare(a.score.toString(), undefined, { numeric: true }) });
+    return score == false ? entries : sortObjectByScore(obj, false);
+}
+// semantically identical?
 function sortObjectByScore(obj) {
-    // Convert the object to an array of entries
-    let entries = Object.entries(obj);
-    // Sort the entries by score
-    entries.sort(([, a], [, b]) => b.score - a.score);
-    return entries;
+  let entries = Object.entries(obj);
+  entries.sort(([, a], [, b]) => {
+    const rankComparison = a.rank - b.rank;
+    const scoreComparison = b.score.toString().localeCompare(a.score.toString(), undefined, { numeric: true });
+    if (scoreComparison !== 0) {
+      return scoreComparison;
+    }
+    if (rankComparison !== 0) {
+      return rankComparison;
+    }
+  });
+  return entries;
 }
 
-const sortDataWithPetOrdering = async (data) => { //seems unneeded, but keeping for now
-    const order = globalJson.petFilesOrdering;
-    const sortedIcons = {};
-    order.forEach(key => {
-        if (data[key] !== undefined) {
-            sortedIcons[key] = data[key];
-        }
-    });
-    return sortedIcons;
-}
+// const sortDataWithPetOrdering = async (data) => { //seems unneeded, but keeping for now
+//     const order = globalJson.petFiiles;
+//     const sortedIcons = {};
+//     order.forEach(key => {
+//         if (data[key] !== undefined) {
+//             sortedIcons[key] = data[key];
+//         }
+//     });
+//     return sortedIcons;
+// }
 
 const sortData = async (data) => {
     let dataToSort = Object.keys(data).map(key => {
@@ -161,9 +219,9 @@ const sortData = async (data) => {
     return sortedData;
 }
 
-const sortPetOwners = async (petOwners) => {
+const sortPetOwners = async (petsFetched) => {
     // Convert the object to an array of entries
-    let entries = Object.entries(petOwners);
+    let entries = Object.entries(petsFetched);
     // Sort the entries by the 'amt' value
     entries.sort((a, b) => b[1].amt - a[1].amt);
     // Convert the entries back to an object
@@ -201,18 +259,14 @@ const getRankByName = (playerData, metric) => {
 //     return null;
 // };
 
-
-
-
-
 module.exports = {
-    getWebhookIdAndTokenFromLink,
+    getchannelIdAndTokenFromLink,
     getRole,
     getRankByName,
     retryPromise,
     formatNumberForMetrics,
     sortData,
-    sortDataWithPetOrdering,
     sortPetOwners,
-    sortObjectByScore
+    sortObjectByScore,
+    parsePetStructures
 };
